@@ -22,4 +22,3 @@ class TestSum():
     def test_sum_returns_integer(self):
         result = SumSolution().compute(1, 2)
         assert isinstance(result, int)
-
