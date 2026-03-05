@@ -188,4 +188,3 @@ def test_dedup_prevents_false_rule_of_3() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 1),
     ])
-
