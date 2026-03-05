@@ -210,8 +210,8 @@ def test_r3_bank_statements_after_own_tasks_with_rule_of_3() -> None:
     """R3: promoted user's bank_statements comes after their other tasks."""
     run_queue([
         call_enqueue("companies_house", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(2),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(3),  # todo
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(3),
         call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(4),
         # User 1 promoted (3 tasks): companies_house, id_verification, then bank_statements
         # User 2 not promoted, comes after user 1's promoted group
@@ -263,6 +263,7 @@ def test_r3_bank_statements_with_dependency_credit_check() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 2),
     ])
+
 
 
 
