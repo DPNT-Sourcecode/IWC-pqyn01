@@ -90,6 +90,53 @@ class Queue:
             return datetime.fromisoformat(timestamp).replace(tzinfo=None)
         return timestamp
 
+    @staticmethod
+    def _is_bank_statements(task) -> int:
+        return 1 if task.provider == "bank_statements" else 0
+
+    def _compute_user_stats(self) -> tuple[dict[int, int], dict[int, object]]:
+        task_count: dict[int, int] = {}
+        priority_timestamps: dict[int, object] = {}
+        for task in self._queue:
+            uid = task.user_id
+            task_count[uid] = task_count.get(uid, 0) + 1
+            if uid not in priority_timestamps or task.timestamp < priority_timestamps[uid]:
+                priority_timestamps[uid] = task.timestamp
+        return task_count, priority_timestamps
+
+    def _apply_priorities(
+        self,
+        task_count: dict[int, int],
+        priority_timestamps: dict[int, object],
+    ) -> None:
+        for task in self._queue:
+            metadata = task.metadata
+            current_earliest = metadata.get("group_earliest_timestamp", MAX_TIMESTAMP)
+            raw_priority = metadata.get("priority")
+            try:
+                priority_level = Priority(raw_priority)
+            except (TypeError, ValueError):
+                priority_level = None
+
+            if priority_level is None or priority_level == Priority.NORMAL:
+                metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
+                if task_count[task.user_id] >= 3:
+                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
+                    metadata["priority"] = Priority.HIGH
+                else:
+                    metadata["priority"] = Priority.NORMAL
+            else:
+                metadata["group_earliest_timestamp"] = current_earliest
+                metadata["priority"] = priority_level
+
+    def _sort_key(self, task):
+        return (
+            self._priority_for_task(task),
+            self._earliest_group_timestamp_for_task(task),
+            self._is_bank_statements(task),
+            self._timestamp_for_task(task),
+        )
+
     def enqueue(self, item: TaskSubmission) -> int:
         tasks = [*self._collect_dependencies(item), item]
 
@@ -116,42 +163,9 @@ class Queue:
         if self.size == 0:
             return None
 
-        user_ids = {task.user_id for task in self._queue}
-        task_count = {}
-        priority_timestamps = {}
-        for user_id in user_ids:
-            user_tasks = [t for t in self._queue if t.user_id == user_id]
-            earliest_timestamp = sorted(user_tasks, key=lambda t: t.timestamp)[0].timestamp
-            priority_timestamps[user_id] = earliest_timestamp
-            task_count[user_id] = len(user_tasks)
-
-        for task in self._queue:
-            metadata = task.metadata
-            current_earliest = metadata.get("group_earliest_timestamp", MAX_TIMESTAMP)
-            raw_priority = metadata.get("priority")
-            try:
-                priority_level = Priority(raw_priority)
-            except (TypeError, ValueError):
-                priority_level = None
-
-            if priority_level is None or priority_level == Priority.NORMAL:
-                metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
-                if task_count[task.user_id] >= 3:
-                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
-                    metadata["priority"] = Priority.HIGH
-                else:
-                    metadata["priority"] = Priority.NORMAL
-            else:
-                metadata["group_earliest_timestamp"] = current_earliest
-                metadata["priority"] = priority_level
-
-        self._queue.sort(
-            key=lambda i: (
-                self._priority_for_task(i),
-                self._earliest_group_timestamp_for_task(i),
-                self._timestamp_for_task(i),
-            )
-        )
+        task_count, priority_timestamps = self._compute_user_stats()
+        self._apply_priorities(task_count, priority_timestamps)
+        self._queue.sort(key=self._sort_key)
 
         task = self._queue.pop(0)
         return TaskDispatch(
@@ -254,3 +268,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
