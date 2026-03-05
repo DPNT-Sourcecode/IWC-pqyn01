@@ -116,4 +116,3 @@ def test_rule_of_3_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("bank_statements", 2),
     ])
-
