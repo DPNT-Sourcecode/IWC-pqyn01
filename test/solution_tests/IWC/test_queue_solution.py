@@ -190,3 +190,78 @@ def test_dedup_prevents_false_rule_of_3() -> None:
         call_dequeue().expect("bank_statements", 1),
     ])
 
+
+# --- R3: Bank statements deprioritization tests ---
+
+
+def test_r3_spec_example() -> None:
+    """R3 spec: bank_statements held back even though it was enqueued first."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 2, iso_ts(delta_minutes=2)).expect(3),
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("companies_house", 2),
+        call_dequeue().expect("bank_statements", 1),
+    ])
+
+
+def test_r3_bank_statements_after_own_tasks_with_rule_of_3() -> None:
+    """R3: promoted user's bank_statements comes after their other tasks."""
+    run_queue([
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(3),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(4),
+        # User 1 promoted (3 tasks): companies_house, id_verification, then bank_statements
+        # User 2 not promoted, comes after user 1's promoted group
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("id_verification", 2),
+    ])
+
+
+def test_r3_multiple_users_bank_statements_no_rule_of_3() -> None:
+    """R3: multiple users' bank_statements all go to end, sorted by timestamp."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("bank_statements", 3, iso_ts(delta_minutes=3)).expect(3),
+        # Non-bank_statements first, then bank_statements by timestamp
+        call_dequeue().expect("id_verification", 2),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("bank_statements", 3),
+    ])
+
+
+def test_r3_all_bank_statements_falls_through_to_timestamp() -> None:
+    """R3 edge case: when all tasks are bank_statements, ordering falls through
+    to timestamp as usual."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=10)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(2),
+        call_enqueue("bank_statements", 3, iso_ts(delta_minutes=5)).expect(3),
+        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("bank_statements", 3),
+        call_dequeue().expect("bank_statements", 1),
+    ])
+
+
+def test_r3_bank_statements_with_dependency_credit_check() -> None:
+    """R3: credit_check dependency (companies_house) is not bank_statements,
+    so it is not deprioritized; bank_statements goes last within promoted group."""
+    run_queue([
+        call_enqueue("credit_check", 1, iso_ts(delta_minutes=0)).expect(2),  # adds companies_house
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(3),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=0)).expect(4),
+        # User 1 has 3 tasks -> promoted to HIGH
+        # Within user 1: companies_house, credit_check first, then bank_statements
+        # User 2 stays NORMAL
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("credit_check", 1),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("id_verification", 2),
+    ])
+
+
