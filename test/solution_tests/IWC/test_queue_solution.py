@@ -116,3 +116,76 @@ def test_rule_of_3_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("bank_statements", 2),
     ])
+
+
+# --- R2: Deduplication tests ---
+
+
+def test_dedup_exact_duplicate() -> None:
+    """Spec example: same (user_id, provider) enqueued twice, size stays 1."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("id_verification", 1),
+    ])
+
+
+def test_dedup_keeps_earlier_timestamp() -> None:
+    """When existing task has earlier timestamp, it is kept."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=3)).expect(2),
+        # user 1's task at t+0 should dequeue before user 2's at t+3
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("bank_statements", 2),
+    ])
+
+
+def test_dedup_replaces_with_earlier_new_timestamp() -> None:
+    """When new task has earlier timestamp, it replaces the existing one."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=3)).expect(2),
+        # user 1's task should now have t+0, dequeuing before user 2's t+3
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("bank_statements", 2),
+    ])
+
+
+def test_dedup_different_users_same_provider() -> None:
+    """Same provider for different users are NOT duplicates."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(2),
+        call_size().expect(2),
+    ])
+
+
+def test_dedup_with_dependency_resolution() -> None:
+    """Enqueueing credit_check adds companies_house dep; enqueueing companies_house again is a no-op."""
+    run_queue([
+        call_enqueue("credit_check", 1, iso_ts(delta_minutes=0)).expect(2),
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=0)).expect(2),
+        call_size().expect(2),
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("credit_check", 1),
+    ])
+
+
+def test_dedup_prevents_false_rule_of_3() -> None:
+    """Duplicate enqueues should not inflate task count to trigger Rule of 3."""
+    run_queue([
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(3),
+        # user 1 has 2 unique tasks, not 3 — no promotion
+        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("id_verification", 1),
+    ])
+
