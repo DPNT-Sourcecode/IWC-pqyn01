@@ -108,8 +108,8 @@ def test_rule_of_3_two_users_both_promoted() -> None:
 def test_rule_of_3_with_dependencies() -> None:
     """Auto-added dependencies count toward the 3-task threshold."""
     run_queue([
-        call_enqueue("credit_check", 1, iso_ts(delta_minutes=5)).expect(2),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(3),
+        call_enqueue("credit_check", 1, iso_ts(delta_minutes=4)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(3),
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(4),
         call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("credit_check", 1),
@@ -125,8 +125,8 @@ def test_dedup_exact_duplicate() -> None:
     """Spec example: same (user_id, provider) enqueued twice, size stays 1."""
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(1),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=4)).expect(2),
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("bank_statements", 1),
     ])
@@ -180,9 +180,9 @@ def test_dedup_prevents_false_rule_of_3() -> None:
     """Duplicate enqueues should not inflate task count to trigger Rule of 3."""
     run_queue([
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(2),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(2),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(3),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=4)).expect(3),
         # user 1 has 2 unique tasks, not 3 — no promotion
         # id_verification dequeues first (bank_statements deprioritized)
         call_dequeue().expect("id_verification", 1),
@@ -226,7 +226,7 @@ def test_r3_multiple_users_bank_statements_no_rule_of_3() -> None:
     """R3: multiple users' bank_statements all go to end, sorted by timestamp."""
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=4)).expect(2),
         call_enqueue("bank_statements", 3, iso_ts(delta_minutes=3)).expect(3),
         # Non-bank_statements first, then bank_statements by timestamp
         call_dequeue().expect("id_verification", 2),
@@ -484,5 +484,6 @@ def test_r5_age_promotion_does_not_skip_older_timestamp() -> None:
         call_dequeue().expect("bank_statements", 2),
         call_dequeue().expect("id_verification", 3),
     ])
+
 
 
