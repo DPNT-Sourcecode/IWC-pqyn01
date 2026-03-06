@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .utils import call_dequeue, call_enqueue, call_size, iso_ts, run_queue, call_age
+from .utils import call_dequeue, call_enqueue, call_size, iso_ts, run_queue, call_age, call_purge
 
 
 def test_enqueue_size_dequeue_flow() -> None:
@@ -70,7 +70,7 @@ def test_purge() -> None:
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("id_verification", 2, iso_ts(delta_minutes=0)).expect(2),
-        {"name": "purge", "input": None, "expect": True},
+        call_purge().expect(True),
         call_size().expect(0),
     ])
 
@@ -291,4 +291,5 @@ def test_age_multiple_tasks() -> None:
         call_enqueue("companies_house", 3, iso_ts(delta_minutes=10)).expect(3),
         call_age().expect(600),
     ])
+
 
