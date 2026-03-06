@@ -11,6 +11,9 @@ def test_enqueue_size_dequeue_flow() -> None:
     ])
 
 
+# --- R1: Initial tests ---
+
+
 def test_rule_of_3() -> None:
     """User with 3+ tasks gets promoted ahead of other users."""
     run_queue([
@@ -505,3 +508,4 @@ def test_r5_no_bank_statements_in_queue() -> None:
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("companies_house", 2),
     ])
+

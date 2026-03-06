@@ -2,13 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 
-# LEGACY CODE ASSET
 # RESOLVED on deploy
 from solutions.IWC.task_types import TaskSubmission, TaskDispatch
 
 
 class Priority(IntEnum):
-    """Represents the queue ordering tiers observed in the legacy system."""
+    """Represents the queue ordering tiers observed in the system."""
     HIGH = 1
     NORMAL = 2
 
@@ -308,3 +307,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
