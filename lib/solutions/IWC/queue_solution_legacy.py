@@ -159,7 +159,7 @@ class Queue:
 
         return self.size
 
-    def dequeue(self):
+    def dequeue(self) -> TaskDispatch | None:
         if self.size == 0:
             return None
 
@@ -174,17 +174,17 @@ class Queue:
         )
 
     @property
-    def size(self):
+    def size(self) -> int:
         return len(self._queue)
 
     @property
-    def age(self):
+    def age(self) -> int:
         if len(self._queue) < 2:
             return 0
         timestamps = [self._timestamp_for_task(task) for task in self._queue]
-        return (max(timestamps) - min(timestamps)).total_seconds()
+        return int((max(timestamps) - min(timestamps)).total_seconds())
 
-    def purge(self):
+    def purge(self) -> bool:
         self._queue.clear()
         return True
 
@@ -271,4 +271,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
