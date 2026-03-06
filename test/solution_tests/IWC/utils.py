@@ -37,6 +37,10 @@ def call_enqueue(provider: str, user_id: int, timestamp: str) -> QueueActionBuil
     )
 
 
+def call_age() -> QueueActionBuilder:
+    return QueueActionBuilder("age")
+
+
 def call_size() -> QueueActionBuilder:
     return QueueActionBuilder("size")
 
@@ -72,3 +76,4 @@ def run_queue(actions: Iterable[dict[str, Any]]) -> None:
 
 
 __all__ = ["iso_ts", "call_enqueue", "call_size", "call_dequeue", "run_queue"]
+
