@@ -293,3 +293,71 @@ def test_age_multiple_tasks() -> None:
     ])
 
 
+def test_age_spec_example() -> None:
+    """R4 spec example: two tasks 5 minutes apart -> age is 300 seconds."""
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
+        call_age().expect(300),
+    ])
+
+
+def test_age_after_dequeue() -> None:
+    """Age updates after dequeueing changes the oldest/newest boundary."""
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("id_verification", 3, iso_ts(delta_minutes=10)).expect(3),
+        call_age().expect(600),
+        # Dequeue removes the oldest (user 1 at t+0)
+        call_dequeue().expect("id_verification", 1),
+        # Age should now be between user 2 (t+5) and user 3 (t+10) = 300s
+        call_age().expect(300),
+    ])
+
+
+def test_age_after_purge() -> None:
+    """Age returns 0 after purging the queue."""
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=10)).expect(2),
+        call_age().expect(600),
+        call_purge().expect(True),
+        call_age().expect(0),
+    ])
+
+
+def test_age_same_timestamps() -> None:
+    """Age is 0 when all tasks share the same timestamp."""
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("companies_house", 2, iso_ts(delta_minutes=0)).expect(2),
+        call_enqueue("bank_statements", 3, iso_ts(delta_minutes=0)).expect(3),
+        call_age().expect(0),
+    ])
+
+
+def test_age_with_dedup_timestamp_replacement() -> None:
+    """Dedup replaces with earlier timestamp; age should reflect the updated value."""
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=10)).expect(1),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=10)).expect(2),
+        call_age().expect(0),
+        # Re-enqueue user 1 with earlier timestamp; dedup replaces it
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(2),
+        # Age should now be 600s (t+0 to t+10)
+        call_age().expect(600),
+    ])
+
+
+def test_age_with_dependencies() -> None:
+    """Auto-added dependency timestamps are included in age calculation."""
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        # credit_check auto-adds companies_house; both share the t+10 timestamp
+        call_enqueue("credit_check", 2, iso_ts(delta_minutes=10)).expect(3),
+        # Age spans t+0 (user 1) to t+10 (user 2's tasks) = 600s
+        call_age().expect(600),
+    ])
+
+
