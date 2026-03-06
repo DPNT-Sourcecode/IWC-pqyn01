@@ -359,5 +359,3 @@ def test_age_with_dependencies() -> None:
         # Age spans t+0 (user 1) to t+10 (user 2's tasks) = 600s
         call_age().expect(600),
     ])
-
-
