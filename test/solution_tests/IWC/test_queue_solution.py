@@ -402,7 +402,6 @@ def test_r5_not_old_enough() -> None:
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("id_verification", 2, iso_ts(delta_minutes=4)).expect(2),
-        # Delta 240s < 300s — R5 does not apply, R3 deprioritizes bank_statements
         call_dequeue().expect("id_verification", 2),
         call_dequeue().expect("bank_statements", 1),
     ])
@@ -413,7 +412,6 @@ def test_r5_exactly_300s_boundary() -> None:
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
-        # Delta exactly 300s — R5 applies; no older tasks, bank_statements first
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 2),
     ])
@@ -425,9 +423,7 @@ def test_r5_multiple_candidates_different_timestamps() -> None:
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=2)).expect(2),
         call_enqueue("companies_house", 3, iso_ts(delta_minutes=7)).expect(3),
-        # Both qualify (420s and 300s). User 1 is earliest → dequeues first
         call_dequeue().expect("bank_statements", 1),
-        # Re-eval: user 2 still qualifies (300s). No older tasks.
         call_dequeue().expect("bank_statements", 2),
         call_dequeue().expect("companies_house", 3),
     ])
@@ -442,14 +438,9 @@ def test_r5_with_rule_of_3_interaction() -> None:
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=2)).expect(3),
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=3)).expect(4),
         call_enqueue("companies_house", 3, iso_ts(delta_minutes=10)).expect(5),
-        # User 1 has 3 tasks → Rule of 3. bank_statements(2) qualifies for R5.
-        # Older tasks block: companies_house(1)@t+0, id_verification(1)@t+1
         call_dequeue().expect("companies_house", 1),
-        # User 1 drops to 2 tasks, no longer Rule of 3. id_verification(1) still older.
         call_dequeue().expect("id_verification", 1),
-        # No older tasks remain → bank_statements(2) dequeues
         call_dequeue().expect("bank_statements", 2),
-        # bank_statements(1) now qualifies (420s), no older tasks
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("companies_house", 3),
     ])
@@ -462,9 +453,7 @@ def test_r5_all_bank_statements_some_time_sensitive() -> None:
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=3)).expect(2),
         call_enqueue("bank_statements", 3, iso_ts(delta_minutes=7)).expect(3),
-        # User 1: 420s qualifies. Users 2 & 3 don't.
         call_dequeue().expect("bank_statements", 1),
-        # User 2: 240s doesn't qualify. Normal sort by timestamp.
         call_dequeue().expect("bank_statements", 2),
         call_dequeue().expect("bank_statements", 3),
     ])
@@ -477,7 +466,6 @@ def test_r5_bank_statements_is_oldest_task() -> None:
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("id_verification", 2, iso_ts(delta_minutes=3)).expect(2),
         call_enqueue("companies_house", 3, iso_ts(delta_minutes=7)).expect(3),
-        # bank_statements(1): 420s qualifies. No older tasks.
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 2),
         call_dequeue().expect("companies_house", 3),
@@ -486,15 +474,13 @@ def test_r5_bank_statements_is_oldest_task() -> None:
 
 def test_r5_re_evaluation_after_dequeue() -> None:
     """After dequeuing an R5 candidate, the next dequeue re-evaluates.
-    A bank_statements that didn't qualify before still doesn't if max_ts
+    A bank_statements that didn't qualify before still doesn't if max_timestamp
     hasn't changed enough."""
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=3)).expect(2),
         call_enqueue("companies_house", 3, iso_ts(delta_minutes=7)).expect(3),
-        # User 1: 420s qualifies. User 2: 240s doesn't.
         call_dequeue().expect("bank_statements", 1),
-        # Re-eval: user 2 still only 240s — R3 deprioritizes behind companies_house
         call_dequeue().expect("companies_house", 3),
         call_dequeue().expect("bank_statements", 2),
     ])
@@ -508,4 +494,5 @@ def test_r5_no_bank_statements_in_queue() -> None:
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("companies_house", 2),
     ])
+
 
