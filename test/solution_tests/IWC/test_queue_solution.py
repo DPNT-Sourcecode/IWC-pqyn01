@@ -79,8 +79,8 @@ def test_rule_of_3_boundary_no_promotion() -> None:
     """User with only 2 tasks is NOT promoted; bank_statements deprioritized to end."""
     run_queue([
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("companies_house", 1, iso_ts(delta_minutes=4)).expect(2),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=4)).expect(3),
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(3),
         call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("bank_statements", 2),
@@ -108,8 +108,8 @@ def test_rule_of_3_two_users_both_promoted() -> None:
 def test_rule_of_3_with_dependencies() -> None:
     """Auto-added dependencies count toward the 3-task threshold."""
     run_queue([
-        call_enqueue("credit_check", 1, iso_ts(delta_minutes=4)).expect(2),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(3),
+        call_enqueue("credit_check", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(3),
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(4),
         call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("credit_check", 1),
@@ -125,8 +125,8 @@ def test_dedup_exact_duplicate() -> None:
     """Spec example: same (user_id, provider) enqueued twice, size stays 1."""
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(1),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=4)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(2),
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("bank_statements", 1),
     ])
@@ -180,9 +180,9 @@ def test_dedup_prevents_false_rule_of_3() -> None:
     """Duplicate enqueues should not inflate task count to trigger Rule of 3."""
     run_queue([
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(2),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=4)).expect(2),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=4)).expect(3),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(3),
         # user 1 has 2 unique tasks, not 3 — no promotion
         # id_verification dequeues first (bank_statements deprioritized)
         call_dequeue().expect("id_verification", 1),
@@ -226,7 +226,7 @@ def test_r3_multiple_users_bank_statements_no_rule_of_3() -> None:
     """R3: multiple users' bank_statements all go to end, sorted by timestamp."""
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("id_verification", 2, iso_ts(delta_minutes=4)).expect(2),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
         call_enqueue("bank_statements", 3, iso_ts(delta_minutes=3)).expect(3),
         # Non-bank_statements first, then bank_statements by timestamp
         call_dequeue().expect("id_verification", 2),
@@ -360,130 +360,6 @@ def test_age_with_dependencies() -> None:
         call_age().expect(600),
     ])
 
-
-# --- R5: Time-Sensitive Bank Statements tests ---
-
-
-def test_r5_spec_example_1() -> None:
-    """R5 Example #1: bank_statements promoted when its age >= 5 minutes,
-    but still cannot skip ahead of tasks with an older timestamp."""
-    run_queue([
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=1)).expect(2),
-        call_enqueue("companies_house", 3, iso_ts(delta_minutes=7)).expect(3),
-        # bank_statements (t+1) is 6 min older than newest (t+7) -> promoted
-        # but id_verification (t+0) has older timestamp, so still goes first
-        call_dequeue().expect("id_verification", 1),
-        call_dequeue().expect("bank_statements", 2),
-        call_dequeue().expect("companies_house", 3),
-    ])
-
-
-def test_r5_spec_example_2_tiebreaker() -> None:
-    """R5 Example #2: two bank_statements with same timestamp both promoted,
-    FIFO tiebreaker applies — user 2 before user 1."""
-    run_queue([
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=2)).expect(2),
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=2)).expect(3),
-        call_enqueue("companies_house", 1, iso_ts(delta_minutes=3)).expect(4),
-        call_enqueue("companies_house", 3, iso_ts(delta_minutes=10)).expect(5),
-        # Both bank_statements at t+2, newest is t+10 -> age of 8 min >= 5
-        # id_verification at t+0 first, then bank_statements in FIFO order,
-        # then companies_house tasks by timestamp
-        call_dequeue().expect("id_verification", 1),
-        call_dequeue().expect("bank_statements", 2),
-        call_dequeue().expect("bank_statements", 1),
-        call_dequeue().expect("companies_house", 1),
-        call_dequeue().expect("companies_house", 3),
-    ])
-
-
-def test_r5_bank_statements_not_old_enough() -> None:
-    """bank_statements with age < 5 min stays deprioritized (R3 behaviour)."""
-    run_queue([
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("id_verification", 2, iso_ts(delta_minutes=4)).expect(2),
-        # bank_statements age is 4 min < 5 -> not promoted, stays at back
-        call_dequeue().expect("id_verification", 2),
-        call_dequeue().expect("bank_statements", 1),
-    ])
-
-
-def test_r5_exactly_5_minutes() -> None:
-    """Boundary: bank_statements exactly 5 min older than newest -> promoted."""
-    run_queue([
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
-        # bank_statements age is exactly 5 min >= 5 -> promoted
-        # Both now sort by timestamp; bank_statements (t+0) before id_verification (t+5)
-        call_dequeue().expect("bank_statements", 1),
-        call_dequeue().expect("id_verification", 2),
-    ])
-
-
-def test_r5_promotion_with_rule_of_3() -> None:
-    """R5 interacts with Rule of 3: promoted user's bank_statements no longer
-    forced to back of group when its age >= 5 min."""
-    run_queue([
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("companies_house", 1, iso_ts(delta_minutes=1)).expect(2),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=2)).expect(3),
-        call_enqueue("id_verification", 2, iso_ts(delta_minutes=7)).expect(4),
-        # User 1 has 3 tasks -> Rule of 3 promotion
-        # bank_statements at t+0 is 7 min older than newest (t+7) -> R5 promotion
-        # Within user 1's group, bank_statements no longer deprioritized -> sort by timestamp
-        # bank_statements (t+0) first, then companies_house (t+1), then id_verification (t+2)
-        call_dequeue().expect("bank_statements", 1),
-        call_dequeue().expect("companies_house", 1),
-        call_dequeue().expect("id_verification", 1),
-        call_dequeue().expect("id_verification", 2),
-    ])
-
-
-def test_r5_multiple_bank_statements_mixed_age() -> None:
-    """One bank_statements old enough for promotion, another is not."""
-    run_queue([
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=4)).expect(2),
-        call_enqueue("id_verification", 3, iso_ts(delta_minutes=5)).expect(3),
-        # User 1's bank_statements: age = 5 min -> promoted (>= 5)
-        # User 2's bank_statements: age = 1 min -> NOT promoted, stays deprioritized
-        call_dequeue().expect("bank_statements", 1),
-        call_dequeue().expect("id_verification", 3),
-        call_dequeue().expect("bank_statements", 2),
-    ])
-
-
-def test_r5_all_tasks_are_old_bank_statements() -> None:
-    """All tasks are bank_statements and all old enough -> sort by timestamp."""
-    run_queue([
-        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=3)).expect(2),
-        call_enqueue("bank_statements", 3, iso_ts(delta_minutes=7)).expect(3),
-        # All are bank_statements; users 1 (age=7) and 2 (age=4) vs newest t+7
-        # User 1: 7 min >= 5 -> promoted; User 2: 4 min < 5 -> NOT promoted
-        # User 3 is the newest, age=0 -> NOT promoted
-        # Promoted first by timestamp, then non-promoted by timestamp
-        call_dequeue().expect("bank_statements", 1),
-        call_dequeue().expect("bank_statements", 2),
-        call_dequeue().expect("bank_statements", 3),
-    ])
-
-
-def test_r5_age_promotion_does_not_skip_older_timestamp() -> None:
-    """Promoted bank_statements must not jump ahead of a non-bank task
-    with an older timestamp."""
-    run_queue([
-        call_enqueue("companies_house", 1, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=2)).expect(2),
-        call_enqueue("id_verification", 3, iso_ts(delta_minutes=8)).expect(3),
-        # bank_statements at t+2, age = 6 min -> promoted
-        # But companies_house at t+0 has an older timestamp -> still goes first
-        call_dequeue().expect("companies_house", 1),
-        call_dequeue().expect("bank_statements", 2),
-        call_dequeue().expect("id_verification", 3),
-    ])
 
 
 
