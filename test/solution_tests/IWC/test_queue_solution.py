@@ -79,8 +79,8 @@ def test_rule_of_3_boundary_no_promotion() -> None:
     """User with only 2 tasks is NOT promoted; bank_statements deprioritized to end."""
     run_queue([
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(1),
-        call_enqueue("companies_house", 1, iso_ts(delta_minutes=5)).expect(2),
-        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(3),
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=4)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=4)).expect(3),
         call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("bank_statements", 2),
@@ -484,4 +484,5 @@ def test_r5_age_promotion_does_not_skip_older_timestamp() -> None:
         call_dequeue().expect("bank_statements", 2),
         call_dequeue().expect("id_verification", 3),
     ])
+
 

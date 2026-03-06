@@ -133,14 +133,11 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
-    def _sort_key(self, task, max_ts):
-        bank_deprioritized = self._is_bank_statements(task)
-        if bank_deprioritized and (max_ts - self._timestamp_for_task(task)).total_seconds() >= 300:
-            bank_deprioritized = 0
+    def _sort_key(self, task):
         return (
             self._priority_for_task(task),
             self._earliest_group_timestamp_for_task(task),
-            bank_deprioritized,
+            self._is_bank_statements(task),
             self._timestamp_for_task(task),
         )
 
@@ -172,8 +169,39 @@ class Queue:
 
         task_count, priority_timestamps = self._compute_user_stats()
         self._apply_priorities(task_count, priority_timestamps)
+
+        # R5: identify bank_statements tasks whose internal age >= 5 minutes
         max_ts = max(self._timestamp_for_task(t) for t in self._queue)
-        self._queue.sort(key=lambda task: self._sort_key(task, max_ts))
+        r5_promoted = []
+        remaining = []
+        for task in self._queue:
+            if (task.provider == "bank_statements"
+                    and (max_ts - self._timestamp_for_task(task)).total_seconds() >= 300):
+                r5_promoted.append(task)
+            else:
+                remaining.append(task)
+
+        if not r5_promoted:
+            # No R5 promotions — sort normally
+            self._queue.sort(key=self._sort_key)
+        else:
+            # Sort remaining tasks normally
+            remaining.sort(key=self._sort_key)
+            # R5 promoted tasks keep their FIFO order (stable, already in enqueue order)
+            # and are sorted by timestamp
+            r5_promoted.sort(key=self._timestamp_for_task)
+            # Merge R5 promoted tasks into sorted remaining by timestamp.
+            # Each R5 task goes after all remaining tasks with an older timestamp.
+            merged = []
+            ri = 0
+            for r5_task in r5_promoted:
+                r5_ts = self._timestamp_for_task(r5_task)
+                while ri < len(remaining) and self._timestamp_for_task(remaining[ri]) <= r5_ts:
+                    merged.append(remaining[ri])
+                    ri += 1
+                merged.append(r5_task)
+            merged.extend(remaining[ri:])
+            self._queue[:] = merged
 
         task = self._queue.pop(0)
         return TaskDispatch(
@@ -279,4 +307,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
