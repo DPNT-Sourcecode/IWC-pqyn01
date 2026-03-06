@@ -133,11 +133,14 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
-    def _sort_key(self, task):
+    def _sort_key(self, task, max_ts):
+        bank_deprioritized = self._is_bank_statements(task)
+        if bank_deprioritized and (max_ts - self._timestamp_for_task(task)).total_seconds() >= 300:
+            bank_deprioritized = 0
         return (
             self._priority_for_task(task),
             self._earliest_group_timestamp_for_task(task),
-            self._is_bank_statements(task),
+            bank_deprioritized,
             self._timestamp_for_task(task),
         )
 
@@ -169,7 +172,8 @@ class Queue:
 
         task_count, priority_timestamps = self._compute_user_stats()
         self._apply_priorities(task_count, priority_timestamps)
-        self._queue.sort(key=self._sort_key)
+        max_ts = max(self._timestamp_for_task(t) for t in self._queue)
+        self._queue.sort(key=lambda task: self._sort_key(task, max_ts))
 
         task = self._queue.pop(0)
         return TaskDispatch(
@@ -275,3 +279,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
