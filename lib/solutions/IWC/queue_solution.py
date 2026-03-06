@@ -165,13 +165,12 @@ class Queue:
 
     def _find_oldest_bank_statements_candidate(self):
         max_ts = max(self._timestamp_for_task(t) for t in self._queue)
-
-        # Find best R5 candidate: earliest timestamp, FIFO for ties
-        best_r5 = None
+        cand_task = None
         for task in self._queue:
             if (task.provider == "bank_statements" and (max_ts - self._timestamp_for_task(task)).total_seconds() >= 300):
-                if (best_r5 is None or self._timestamp_for_task(task) < self._timestamp_for_task(best_r5)):
-                    best_r5 = task
+                if (cand_task is None or self._timestamp_for_task(task) < self._timestamp_for_task(cand_task)):
+                    cand_task = task
+        return cand_task
 
     def dequeue(self) -> TaskDispatch | None:
         if self.size == 0:
@@ -180,20 +179,20 @@ class Queue:
         task_count, priority_timestamps = self._compute_user_stats()
         self._apply_priorities(task_count, priority_timestamps)
 
-        self._find_oldest_bank_statements_candidate()
+        bank_task = self._find_oldest_bank_statements_candidate()
 
-        if best_r5 is not None:
-            r5_ts = self._timestamp_for_task(best_r5)
+        if bank_task is not None:
+            r5_ts = self._timestamp_for_task(bank_task)
             # Find tasks with older timestamps that block the R5 candidate
             older_tasks = [
                 t for t in self._queue
-                if self._timestamp_for_task(t) < r5_ts and t is not best_r5
+                if self._timestamp_for_task(t) < r5_ts and t is not bank_task
             ]
             if older_tasks:
                 older_tasks.sort(key=self._sort_key)
                 task = older_tasks[0]
             else:
-                task = best_r5
+                task = bank_task
             self._queue.remove(task)
             return TaskDispatch(provider=task.provider, user_id=task.user_id)
 
@@ -304,4 +303,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
