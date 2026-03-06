@@ -6,16 +6,19 @@ from enum import IntEnum
 # RESOLVED on deploy
 from solutions.IWC.task_types import TaskSubmission, TaskDispatch
 
+
 class Priority(IntEnum):
     """Represents the queue ordering tiers observed in the legacy system."""
     HIGH = 1
     NORMAL = 2
+
 
 @dataclass
 class Provider:
     name: str
     base_url: str
     depends_on: list[str]
+
 
 MAX_TIMESTAMP = datetime.max.replace(tzinfo=None)
 
@@ -46,6 +49,7 @@ REGISTERED_PROVIDERS: list[Provider] = [
     CREDIT_CHECK_PROVIDER,
     ID_VERIFICATION_PROVIDER,
 ]
+
 
 class Queue:
     def __init__(self):
