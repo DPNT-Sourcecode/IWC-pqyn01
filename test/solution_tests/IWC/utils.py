@@ -41,6 +41,10 @@ def call_age() -> QueueActionBuilder:
     return QueueActionBuilder("age")
 
 
+def call_purge() -> QueueActionBuilder:
+    return QueueActionBuilder("purge", expect_factory=lambda: True)
+
+
 def call_size() -> QueueActionBuilder:
     return QueueActionBuilder("size")
 
@@ -76,4 +80,5 @@ def run_queue(actions: Iterable[dict[str, Any]]) -> None:
 
 
 __all__ = ["iso_ts", "call_enqueue", "call_size", "call_dequeue", "run_queue"]
+
 
