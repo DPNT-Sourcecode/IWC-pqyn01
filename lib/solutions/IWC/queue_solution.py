@@ -163,7 +163,7 @@ class Queue:
 
         return self.size
 
-    def _find_oldest_bank_statements_candidate(self):
+    def _find_oldest_bank_statements_candidate(self) -> TaskSubmission | None:
         max_ts = max(self._timestamp_for_task(t) for t in self._queue)
         cand_task = None
         for task in self._queue:
@@ -171,6 +171,18 @@ class Queue:
                 if (cand_task is None or self._timestamp_for_task(task) < self._timestamp_for_task(cand_task)):
                     cand_task = task
         return cand_task
+
+    def _find_older_task(self, task) -> TaskSubmission | None:
+        task = None
+        timestamp = self._timestamp_for_task(task)
+        older_tasks = [
+            t for t in self._queue
+            if self._timestamp_for_task(t) < timestamp and t is not task
+        ]
+        if older_tasks:
+            older_tasks.sort(key=self._sort_key)
+            task = older_tasks[0]
+        return task
 
     def dequeue(self) -> TaskDispatch | None:
         if self.size == 0:
@@ -182,15 +194,9 @@ class Queue:
         bank_task = self._find_oldest_bank_statements_candidate()
 
         if bank_task is not None:
-            bank_ts = self._timestamp_for_task(bank_task)
-            # Find tasks with older timestamps that block the bank candidate
-            older_tasks = [
-                t for t in self._queue
-                if self._timestamp_for_task(t) < bank_ts and t is not bank_task
-            ]
-            if older_tasks:
-                older_tasks.sort(key=self._sort_key)
-                task = older_tasks[0]
+            older_task = self._find_older_task(bank_task)
+            if older_task is not None:
+                task = older_task
             else:
                 task = bank_task
             self._queue.remove(task)
@@ -303,6 +309,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
