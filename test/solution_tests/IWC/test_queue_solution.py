@@ -505,5 +505,3 @@ def test_r5_no_bank_statements_in_queue() -> None:
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("companies_house", 2),
     ])
-
-

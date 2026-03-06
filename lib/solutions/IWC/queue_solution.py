@@ -173,7 +173,6 @@ class Queue:
         return cand_task
 
     def _find_older_task(self, task) -> TaskSubmission | None:
-        task = None
         timestamp = self._timestamp_for_task(task)
         older_tasks = [
             t for t in self._queue
@@ -181,8 +180,8 @@ class Queue:
         ]
         if older_tasks:
             older_tasks.sort(key=self._sort_key)
-            task = older_tasks[0]
-        return task
+            return older_tasks[0]
+        return None
 
     def dequeue(self) -> TaskDispatch | None:
         if self.size == 0:
@@ -309,7 +308,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
-
