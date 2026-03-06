@@ -182,11 +182,11 @@ class Queue:
         bank_task = self._find_oldest_bank_statements_candidate()
 
         if bank_task is not None:
-            r5_ts = self._timestamp_for_task(bank_task)
-            # Find tasks with older timestamps that block the R5 candidate
+            bank_ts = self._timestamp_for_task(bank_task)
+            # Find tasks with older timestamps that block the bank candidate
             older_tasks = [
                 t for t in self._queue
-                if self._timestamp_for_task(t) < r5_ts and t is not bank_task
+                if self._timestamp_for_task(t) < bank_ts and t is not bank_task
             ]
             if older_tasks:
                 older_tasks.sort(key=self._sort_key)
@@ -196,7 +196,7 @@ class Queue:
             self._queue.remove(task)
             return TaskDispatch(provider=task.provider, user_id=task.user_id)
 
-        # No R5 candidates — normal sort and dequeue
+        # No bank candidates — normal sort and dequeue
         self._queue.sort(key=self._sort_key)
 
         task = self._queue.pop(0)
@@ -303,5 +303,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
