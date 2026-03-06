@@ -263,7 +263,3 @@ def test_r3_bank_statements_with_dependency_credit_check() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 2),
     ])
-
-
-
-
