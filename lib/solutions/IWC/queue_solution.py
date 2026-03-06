@@ -163,6 +163,16 @@ class Queue:
 
         return self.size
 
+    def _find_oldest_bank_statements_candidate(self):
+        max_ts = max(self._timestamp_for_task(t) for t in self._queue)
+
+        # Find best R5 candidate: earliest timestamp, FIFO for ties
+        best_r5 = None
+        for task in self._queue:
+            if (task.provider == "bank_statements" and (max_ts - self._timestamp_for_task(task)).total_seconds() >= 300):
+                if (best_r5 is None or self._timestamp_for_task(task) < self._timestamp_for_task(best_r5)):
+                    best_r5 = task
+
     def dequeue(self) -> TaskDispatch | None:
         if self.size == 0:
             return None
@@ -170,17 +180,7 @@ class Queue:
         task_count, priority_timestamps = self._compute_user_stats()
         self._apply_priorities(task_count, priority_timestamps)
 
-        # R5: check for time-sensitive bank_statements
-        max_ts = max(self._timestamp_for_task(t) for t in self._queue)
-
-        # Find best R5 candidate: earliest timestamp, FIFO for ties
-        best_r5 = None
-        for task in self._queue:
-            if (task.provider == "bank_statements"
-                    and (max_ts - self._timestamp_for_task(task)).total_seconds() >= 300):
-                if (best_r5 is None
-                        or self._timestamp_for_task(task) < self._timestamp_for_task(best_r5)):
-                    best_r5 = task
+        self._find_oldest_bank_statements_candidate()
 
         if best_r5 is not None:
             r5_ts = self._timestamp_for_task(best_r5)
@@ -304,3 +304,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
