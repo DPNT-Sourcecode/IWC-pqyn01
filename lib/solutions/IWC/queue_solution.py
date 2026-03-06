@@ -169,6 +169,35 @@ class Queue:
 
         task_count, priority_timestamps = self._compute_user_stats()
         self._apply_priorities(task_count, priority_timestamps)
+
+        # R5: check for time-sensitive bank_statements
+        max_ts = max(self._timestamp_for_task(t) for t in self._queue)
+
+        # Find best R5 candidate: earliest timestamp, FIFO for ties
+        best_r5 = None
+        for task in self._queue:
+            if (task.provider == "bank_statements"
+                    and (max_ts - self._timestamp_for_task(task)).total_seconds() >= 300):
+                if (best_r5 is None
+                        or self._timestamp_for_task(task) < self._timestamp_for_task(best_r5)):
+                    best_r5 = task
+
+        if best_r5 is not None:
+            r5_ts = self._timestamp_for_task(best_r5)
+            # Find tasks with older timestamps that block the R5 candidate
+            older_tasks = [
+                t for t in self._queue
+                if self._timestamp_for_task(t) < r5_ts and t is not best_r5
+            ]
+            if older_tasks:
+                older_tasks.sort(key=self._sort_key)
+                task = older_tasks[0]
+            else:
+                task = best_r5
+            self._queue.remove(task)
+            return TaskDispatch(provider=task.provider, user_id=task.user_id)
+
+        # No R5 candidates — normal sort and dequeue
         self._queue.sort(key=self._sort_key)
 
         task = self._queue.pop(0)
@@ -275,6 +304,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
